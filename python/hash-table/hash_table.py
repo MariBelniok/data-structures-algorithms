@@ -9,22 +9,27 @@ class Pair(NamedTuple):
 
 
 class HashTable:
-    def __init__(self, capacity) -> None:
+    def __init__(self, capacity=8, load_factor_threshold=0.6) -> None:
         if capacity < 1:
             raise ValueError("Capacity must be a positive integer")
+        if not (0 < load_factor_threshold <= 1):
+            raise ValueError("Load factor must be between 0 and 1")
         self._slots = capacity * [None]
+        self._load_factor_threshold = load_factor_threshold
     
     def __len__(self):
         return len(self.pairs)
     
     def __setitem__(self, key, value):
+        if self.load_factor >= self._load_factor_threshold:
+            """Resize and rehash when load factor is greater than threshold."""
+            self._resize_and_rehash()
+
         for index, pair in self._probe(key):
             if pair is DELETED: continue
             if pair is None or pair.key == key:
                 self._slots[index] = Pair(key, value)
                 break
-        else:
-            raise MemoryError("Table is full")
 
     def __getitem__(self, key):
         for _, pair in self._probe(key):
@@ -85,7 +90,7 @@ class HashTable:
         
     @classmethod
     def from_dict(cls, dictionary, capacity=None):
-        hash_table = cls(capacity or len(dictionary) * 10)
+        hash_table = cls(capacity or len(dictionary))
         for key, value in dictionary.items():
             hash_table[key] = value
         return hash_table
@@ -109,6 +114,12 @@ class HashTable:
     def capacity(self):
         return len(self._slots)
     
+    @property
+    def load_factor(self):
+        """Calculate the ratio number of occupied slots and total capacity."""
+        occupied_or_deleted = [slot for slot in self._slots if slot]
+        return len(occupied_or_deleted) / self.capacity
+    
     def _index(self, key):
         return hash(key) % self.capacity
     
@@ -117,3 +128,9 @@ class HashTable:
         for _ in range(self.capacity):
             yield index, self._slots[index]
             index = (index + 1) % self.capacity
+
+    def _resize_and_rehash(self):
+        copy = HashTable(self.capacity * 2)
+        for key, value in self.pairs:
+            copy[key] = value
+        self._slots = copy._slots
